@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 const corsOrigin = process.env.CORS_ORIGIN || '*';
 app.use(cors({
-  origin: corsOrigin === '*' ? '*' : corsOrigin.split(','),
+  origin: corsOrigin === '*' ? true : corsOrigin.split(','),
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true

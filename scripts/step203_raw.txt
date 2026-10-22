@@ -1,0 +1,11 @@
+Created At: 2026-10-14T17:14:03+03:00
+Completed At: 2026-10-14T17:14:03+03:00
+{"name":"admin.js","sizeBytes":"998"}
+{"name":"announcements.js","sizeBytes":"1353"}
+{"name":"attendance.js","sizeBytes":"3036"}
+{"name":"auth.js","sizeBytes":"232"}
+{"name":"parent.js","sizeBytes":"1166"}
+{"name":"programs.js","sizeBytes":"2326"}
+{"name":"teacher.js","sizeBytes":"684"}
+
+Summary: This directory contains 0 subdirectories and 7 files.
