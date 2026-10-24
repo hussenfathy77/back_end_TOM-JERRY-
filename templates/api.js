@@ -16,7 +16,14 @@ async function handleResponse(res) {
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || data.message || `Request failed with status ${res.status}`);
+    const error = new Error(data.error || data.message || `Request failed with status ${res.status}`);
+    error.status = res.status;
+    error.data = data;
+    error.code = data.code;
+    error.errors = data.errors;
+    error.alert = data.alert;
+    error.scenario = data.scenario;
+    throw error;
   }
   return data;
 }
@@ -34,6 +41,15 @@ export const api = {
       localStorage.setItem('user', JSON.stringify(data.user));
     }
     return data;
+  },
+
+  async registerParent({ fullName, emailAddress, phoneNumber, password, confirmPassword }) {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fullName, emailAddress, phoneNumber, password, confirmPassword })
+    });
+    return handleResponse(res);
   },
 
   logout() {

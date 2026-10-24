@@ -1,0 +1,204 @@
+/* ─── PARENT LOGIN PAGE STYLES ─────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --primary-green: #2d5a43;
+  --primary-hover: #224734;
+  --bg-mint: #ebf6ee;
+  --card-bg: #ffffff;
+  --text-dark: #192e24;
+  --text-muted: #5e796c;
+  --border-color: #d1e5d9;
+  --error-red: #d9383a;
+  --error-bg: #fde8e8;
+  --success-green: #238053;
+  --success-bg: #e5f6ec;
+}
+
+.parent-login-page {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-mint);
+  min-height: 100vh;
+  color: var(--text-dark);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── SCENARIO TOOLBAR ─────────────────────────────────────────────────── */
+.parent-login-page .scenario-bar {
+  background: #1e392c;
+  color: #cce7d8;
+  padding: 8px 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  flex-wrap: wrap;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.parent-login-page .scenario-bar button {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.parent-login-page .scenario-bar button:hover {
+  background: var(--success-green);
+  border-color: var(--success-green);
+}
+
+/* ─── NAVBAR ───────────────────────────────────────────────────────────── */
+.login-navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 48px;
+  background: transparent;
+}
+
+.parent-login-page .active-pill {
+  background: #395a48;
+  color: #ffffff !important;
+  padding: 8px 18px;
+  border-radius: 20px;
+}
+
+/* ─── MAIN CONTAINER ───────────────────────────────────────────────────── */
+.login-main-container {
+  max-width: 1240px;
+  margin: 20px auto 40px;
+  padding: 0 32px;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 56px;
+  align-items: start;
+  flex: 1;
+}
+
+.login-card {
+  background: var(--card-bg);
+  border-radius: 28px;
+  padding: 38px 40px;
+  box-shadow: 0 12px 40px rgba(29, 69, 48, 0.08);
+  border: 1px solid var(--border-color);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.form-options-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--text-dark);
+}
+
+.checkbox-label input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-green);
+  cursor: pointer;
+}
+
+.forgot-link {
+  color: var(--primary-green);
+  font-weight: 600;
+  text-decoration: underline;
+  font-size: 13px;
+}
+
+.join-family-card {
+  margin-top: 10px;
+  background: #f2f9f5;
+  border: 1px dashed #c0e0cd;
+  border-radius: 16px;
+  padding: 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.join-text {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.btn-join-family {
+  display: inline-block;
+  background: #ffffff;
+  color: var(--primary-green);
+  border: 1.5px solid var(--primary-green);
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+.btn-join-family:hover {
+  background: var(--primary-green);
+  color: #ffffff;
+}
+
+.join-family-card small {
+  font-size: 11px;
+  color: #7b9487;
+}
+
+.switch-account-wrapper {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--primary-green);
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+/* ─── FOOTER ───────────────────────────────────────────────────────────── */
+.login-footer {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 24px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid rgba(45, 90, 67, 0.1);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 968px) {
+  .login-main-container {
+    grid-template-columns: 1fr;
+  }
+}

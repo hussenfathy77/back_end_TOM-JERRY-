@@ -8,6 +8,10 @@ const teacherRoutes = require('./routes/teacher');
 const programRoutes = require('./routes/programs');
 const announcementRoutes = require('./routes/announcements');
 const attendanceRoutes = require('./routes/attendance');
+const classroomRoutes = require('./routes/classrooms');
+const staffRoutes = require('./routes/staff');
+const landingRoutes = require('./routes/landing');
+const admissionRoutes = require('./routes/admissions');
 const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
@@ -47,6 +51,10 @@ app.use('/api/teacher', teacherRoutes);
 app.use('/api/programs', programRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/classrooms', classroomRoutes);
+app.use('/api/staff', staffRoutes);
+app.use('/api/landing', landingRoutes);
+app.use('/api/admissions', admissionRoutes);
 
 // Error handling
 app.use(errorHandler);

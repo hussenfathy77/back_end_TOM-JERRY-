@@ -11,7 +11,11 @@ const files = [
   'ChildrenManagement.jsx',
   'Dashboard.jsx',
   'UserManagement.css',
-  'ChildrenManagement.css'
+  'ChildrenManagement.css',
+  'ParentRegistration.jsx',
+  'ParentRegistration.css',
+  'ParentLogin.jsx',
+  'ParentLogin.css'
 ];
 
 for (const file of files) {
