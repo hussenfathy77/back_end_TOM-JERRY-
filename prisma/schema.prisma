@@ -22,17 +22,38 @@ enum AttendanceStatus {
   EXCUSED
 }
 
-model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      Role     @default(PARENT)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum ClassroomStatus {
+  ACTIVE
+  INACTIVE
+  PLANNING
+  ARCHIVED
+}
 
-  children  Child[]
+enum SessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id         String   @id @default(uuid())
+  name       String
+  email      String   @unique
+  password   String
+  role       Role     @default(PARENT)
+  phone            String?
+  staffRole        String?
+  staffScope       String?  @default("CLASSROOM")
+  employmentType   String?  @default("Full-Time Regular")
+  employmentStatus String?  @default("Active")
+  avatar           String?
+  isActive         Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  children           Child[]
+  assignedClassrooms Classroom[] @relation("ClassroomTeacher")
 
   @@map("users")
 }
@@ -44,13 +65,55 @@ model Child {
   dateOfBirth DateTime
   gender      String
   parentId    String
+  classroomId String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  parent      User         @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  parent      User          @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  classroom   Classroom?    @relation(fields: [classroomId], references: [id], onDelete: SetNull)
   attendances Attendance[]
 
   @@map("children")
+}
+
+model Classroom {
+  id          String          @id @default(uuid())
+  name        String
+  subtitle    String?
+  description String?
+  ageGroup    String?
+  ageFrom     Float?
+  ageTo       Float?
+  roomNumber  String?
+  capacity    Int             @default(15)
+  status      ClassroomStatus @default(ACTIVE)
+  teacherId   String?
+  academicYear String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  teacher     User?               @relation("ClassroomTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  children    Child[]
+  sessions    ClassroomSession[]
+
+  @@map("classrooms")
+}
+
+model ClassroomSession {
+  id          String        @id @default(uuid())
+  classroomId String
+  title       String
+  description String?
+  date        DateTime      @default(now())
+  startTime   String
+  endTime     String
+  status      SessionStatus @default(SCHEDULED)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  classroom   Classroom     @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+  @@map("classroom_sessions")
 }
 
 model Program {
@@ -90,3 +153,55 @@ model Attendance {
 
   @@map("attendances")
 }
+
+enum AdmissionStatus {
+  PENDING
+  REVIEWING
+  INFO_REQUIRED
+  APPROVED
+  WAITLISTED
+  REJECTED
+}
+
+model AdmissionRequest {
+  id                 String          @id @default(uuid())
+  applicationNumber  String?         @unique
+  parentId           String?
+  parentName         String
+  parentEmail        String
+  parentPhone        String
+  relationship       String?
+  childName          String
+  childDob           DateTime?
+  childAge           String?
+  gender             String?
+  requestedClass     String?
+  desiredTerm        String?
+  programInterested  String?
+  preferredStartDate DateTime?
+  status             AdmissionStatus @default(PENDING)
+  stage              Int             @default(2)
+  isDraft            Boolean         @default(false)
+  notes              String?
+  rejectionReason    String?
+  decisionDate       DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@map("admission_requests")
+}
+
+model ContactMessage {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String?
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("contact_messages")
+}
+
