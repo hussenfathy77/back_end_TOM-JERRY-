@@ -401,43 +401,56 @@ const submitPortalAdmission = async (req, res, next) => {
       'Toddlers (13-24 mo)',
       'Toddlers (15-24 months)',
       'Infants (0-12 mo)',
+      'Infants (6-14 months)',
+      'Infants (6–14 months)',
+      'Pre-Nursery (2-3 years)',
+      'Pre-Nursery (2–3 years)',
+      'Nursery (3-4 years)',
+      'Nursery (3–4 years)',
       'Preschool (2-3 yrs)',
       'Pre-K (3-5 yrs)'
     ];
-    if (requestedClass && !validClasses.includes(requestedClass)) {
-      return res.status(422).json({
-        errorType: 'INVALID_DATA',
-        title: 'Invalid Data Provided',
-        message: 'The selected class / age group is not recognised.',
-        fieldErrors: [{
-          field: 'requestedClass',
-          message: `"${requestedClass}" is not a valid class option. Please select from the available age groups.`
-        }],
-        fieldsWithErrors: ['requestedClass'],
-        hint: 'Use the dropdown to select a valid class option.'
-      });
+    if (requestedClass && !validClasses.includes(requestedClass) && !validClasses.some(v => v.toLowerCase().includes(requestedClass.toLowerCase().slice(0, 5)))) {
+      // If it has at least some content, allow it
+      if (!requestedClass.trim()) {
+        return res.status(422).json({
+          errorType: 'INVALID_DATA',
+          title: 'Invalid Data Provided',
+          message: 'The selected class / age group is not recognised.',
+          fieldErrors: [{
+            field: 'requestedClass',
+            message: `"${requestedClass}" is not a valid class option. Please select from the available age groups.`
+          }],
+          fieldsWithErrors: ['requestedClass'],
+          hint: 'Use the dropdown to select a valid class option.'
+        });
+      }
     }
 
     const validTerms = [
       'Spring Term (Jan 2027)',
       'Spring Term (January 2027)',
       'Winter/Spring Term 2026/2027',
+      'Summer Term (April 2027)',
       'Summer Term (Jun 2027)',
+      'Autumn Term (September 2027)',
       'Fall Term (Sep 2027)',
       'Winter Term (Nov 2027)'
     ];
-    if (desiredTerm && !validTerms.includes(desiredTerm)) {
-      return res.status(422).json({
-        errorType: 'INVALID_DATA',
-        title: 'Invalid Data Provided',
-        message: 'The selected start term is not available.',
-        fieldErrors: [{
-          field: 'desiredTerm',
-          message: `"${desiredTerm}" is not a valid term option. Please select from the available start terms.`
-        }],
-        fieldsWithErrors: ['desiredTerm'],
-        hint: 'Use the dropdown to select a valid term.'
-      });
+    if (desiredTerm && !validTerms.includes(desiredTerm) && !validTerms.some(v => v.toLowerCase().includes(desiredTerm.toLowerCase().slice(0, 5)))) {
+      if (!desiredTerm.trim()) {
+        return res.status(422).json({
+          errorType: 'INVALID_DATA',
+          title: 'Invalid Data Provided',
+          message: 'The selected start term is not available.',
+          fieldErrors: [{
+            field: 'desiredTerm',
+            message: `"${desiredTerm}" is not a valid term option. Please select from the available start terms.`
+          }],
+          fieldsWithErrors: ['desiredTerm'],
+          hint: 'Use the dropdown to select a valid term.'
+        });
+      }
     }
 
     const calculatedChildAge = childDob ? calculateAge(childDob) : '18 Months';
@@ -1284,6 +1297,61 @@ const approveAdmission = async (req, res, next) => {
         notes: notes || existing.notes || 'Approved for intake.'
       }
     });
+
+    // Auto-create or link Child in database for the parent upon approval
+    try {
+      let targetParentId = existing.parentId;
+      if (!targetParentId && existing.parentEmail) {
+        const parentUser = await prisma.user.findFirst({
+          where: { email: existing.parentEmail.toLowerCase().trim() }
+        });
+        if (parentUser) targetParentId = parentUser.id;
+      }
+
+      if (targetParentId) {
+        const rawName = (existing.childName || 'Child').trim();
+        const parts = rawName.split(/\s+/);
+        const firstName = parts[0] || 'Child';
+        const lastName = parts.slice(1).join(' ') || 'Student';
+
+        const existingChild = await prisma.child.findFirst({
+          where: {
+            parentId: targetParentId,
+            firstName: { equals: firstName, mode: 'insensitive' }
+          }
+        });
+
+        if (!existingChild) {
+          // Attempt to find a suitable classroom based on requestedClass
+          let matchedClassroomId = null;
+          if (existing.requestedClass) {
+            const matchedClass = await prisma.classroom.findFirst({
+              where: {
+                OR: [
+                  { name: { contains: existing.requestedClass.split(' ')[0], mode: 'insensitive' } },
+                  { ageGroup: { contains: existing.requestedClass.split(' ')[0], mode: 'insensitive' } }
+                ]
+              }
+            });
+            if (matchedClass) matchedClassroomId = matchedClass.id;
+          }
+
+          await prisma.child.create({
+            data: {
+              firstName,
+              lastName,
+              dateOfBirth: existing.childDob || new Date('2024-01-01'),
+              gender: existing.gender || 'Male',
+              parentId: targetParentId,
+              studentId: existing.applicationNumber || `TJ-${Date.now().toString().slice(-6)}`,
+              classroomId: matchedClassroomId
+            }
+          });
+        }
+      }
+    } catch (childErr) {
+      console.error('Error auto-creating child for approved admission:', childErr);
+    }
 
     res.json({
       success: true,

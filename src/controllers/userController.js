@@ -48,13 +48,15 @@ const createUser = async (req, res, next) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    const upperRole = role.toUpperCase();
 
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password: hashedPassword,
-        role: role.toUpperCase()
+        role: upperRole,
+        staffRole: upperRole === 'TEACHER' ? 'Teacher' : null
       },
       select: {
         id: true,
@@ -86,7 +88,14 @@ const updateUser = async (req, res, next) => {
       if (!validRoles.includes(role.toUpperCase())) {
         return res.status(400).json({ error: 'Invalid role' });
       }
-      updateData.role = role.toUpperCase();
+      const upperRole = role.toUpperCase();
+      updateData.role = upperRole;
+      if (upperRole === 'TEACHER') {
+        const existing = await prisma.user.findUnique({ where: { id } });
+        if (!existing?.staffRole) {
+          updateData.staffRole = 'Teacher';
+        }
+      }
     }
 
     const user = await prisma.user.update({

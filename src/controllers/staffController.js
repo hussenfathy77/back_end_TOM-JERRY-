@@ -98,13 +98,15 @@ const getAllStaff = async (req, res, next) => {
       role: roleFilter,
       classId,
       status: statusFilter,
-      page = 1,
-      limit = 6
+      page,
+      limit,
+      sort
     } = req.query;
 
+    const hasPagination = req.query.page !== undefined || (req.query.limit !== undefined && req.query.limit !== 'all');
     const pageNum = parseInt(page) || 1;
-    const take = parseInt(limit) || 6;
-    const skip = (pageNum - 1) * take;
+    const take = hasPagination ? (parseInt(limit) || 10) : undefined;
+    const skip = hasPagination && take ? (pageNum - 1) * take : undefined;
 
     const where = {
       role: 'TEACHER'
@@ -141,6 +143,8 @@ const getAllStaff = async (req, res, next) => {
       ];
     }
 
+    const orderBy = sort === 'name' ? { name: 'asc' } : { createdAt: 'desc' };
+
     const [totalCount, staffList] = await Promise.all([
       prisma.user.count({ where }),
       prisma.user.findMany({
@@ -155,7 +159,7 @@ const getAllStaff = async (req, res, next) => {
             }
           }
         },
-        orderBy: { name: 'asc' },
+        orderBy,
         skip,
         take
       })
@@ -173,12 +177,13 @@ const getAllStaff = async (req, res, next) => {
         };
       } else if (s.assignedClassrooms.length > 0) {
         const cls = s.assignedClassrooms[0];
+        const allNames = s.assignedClassrooms.map((c) => c.name).join(', ');
         assignedClass = {
           id: cls.id,
-          name: cls.name,
+          name: allNames,
           roomNumber: cls.roomNumber,
           type: 'CLASSROOM',
-          badge: cls.name
+          badge: allNames
         };
       } else {
         assignedClass = {
@@ -193,13 +198,15 @@ const getAllStaff = async (req, res, next) => {
         id: s.id,
         name: s.name,
         email: s.email,
-        phone: s.phone || '+1 (555) 000-0000',
+        phone: s.phone || '',
         role: s.staffRole || 'Teacher',
         staffRole: s.staffRole || 'Teacher',
         employmentType: s.employmentType || 'Full-Time Regular',
         employmentStatus: s.employmentStatus || (s.isActive ? 'Active' : 'Onboarding'),
         initials: getInitials(s.name),
         avatar: s.avatar || null,
+        classId: s.assignedClassrooms[0]?.id || null,
+        className: s.assignedClassrooms.length > 0 ? s.assignedClassrooms.map((c) => c.name).join(', ') : '',
         assignedClass,
         status: s.employmentStatus || (s.isActive ? 'Active' : 'Inactive'),
         isActive: s.isActive,
@@ -213,8 +220,8 @@ const getAllStaff = async (req, res, next) => {
       pagination: {
         total: totalCount,
         page: pageNum,
-        limit: take,
-        totalPages: Math.ceil(totalCount / take)
+        limit: take || totalCount,
+        totalPages: take ? Math.ceil(totalCount / take) : 1
       }
     });
   } catch (error) {
@@ -274,7 +281,7 @@ const createStaff = async (req, res, next) => {
     const finalRole = staffRole || role || 'Teacher (Nursery Staff)';
     const finalEmpType = employmentType || 'Full-Time Regular';
     const finalEmpStatus = employmentStatus || 'Active';
-    const finalClassroomId = assignedClassroom || classroomId;
+    const finalClassroomId = req.body.classId || assignedClassroom || classroomId;
 
     if (!finalName || !finalEmail) {
       return res.status(400).json({ error: 'Full Name and Email Address are required' });
@@ -363,22 +370,22 @@ const updateStaff = async (req, res, next) => {
       data: updateData
     });
 
-    // Update classroom assignment if provided
-    if (classroomId !== undefined) {
+    const targetClassId = req.body.classId !== undefined ? req.body.classId : classroomId;
+    if (targetClassId !== undefined) {
       // First unassign from any currently assigned classroom
       await prisma.classroom.updateMany({
         where: { teacherId: id },
         data: { teacherId: null }
       });
 
-      if (classroomId === 'ALL_ROOMS') {
+      if (targetClassId === 'ALL_ROOMS') {
         await prisma.user.update({
           where: { id },
           data: { staffScope: 'ALL_ROOMS' }
         });
-      } else if (classroomId && classroomId !== 'UNASSIGNED') {
+      } else if (targetClassId && targetClassId !== 'UNASSIGNED') {
         await prisma.classroom.update({
-          where: { id: classroomId },
+          where: { id: targetClassId },
           data: { teacherId: id }
         });
         await prisma.user.update({
@@ -438,6 +445,19 @@ const deleteStaff = async (req, res, next) => {
       where: { teacherId: id },
       data: { teacherId: null }
     });
+
+    // Safely remove or unlink any dependent activity logs or notes created by this staff
+    await prisma.childCareNote.deleteMany({ where: { teacherId: id } }).catch(() => {});
+    await prisma.teacherNote.deleteMany({ where: { teacherId: id } }).catch(() => {});
+    await prisma.classRoutine.deleteMany({ where: { teacherId: id } }).catch(() => {});
+    await prisma.dailyTheme.deleteMany({ where: { teacherId: id } }).catch(() => {});
+    await prisma.classroomNotice.deleteMany({ where: { teacherId: id } }).catch(() => {});
+    await prisma.dailyActivity.deleteMany({ where: { loggedById: id } }).catch(() => {});
+    await prisma.napLog.deleteMany({ where: { loggedById: id } }).catch(() => {});
+    await prisma.milestone.deleteMany({ where: { loggedById: id } }).catch(() => {});
+    await prisma.childMoodLog.deleteMany({ where: { loggedById: id } }).catch(() => {});
+    await prisma.developmentalObservation.deleteMany({ where: { loggedById: id } }).catch(() => {});
+    await prisma.attendanceAuditLog.deleteMany({ where: { auditorId: id } }).catch(() => {});
 
     await prisma.user.delete({ where: { id } });
 

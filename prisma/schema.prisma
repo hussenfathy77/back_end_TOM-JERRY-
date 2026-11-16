@@ -20,6 +20,7 @@ enum AttendanceStatus {
   PRESENT
   ABSENT
   EXCUSED
+  LATE
 }
 
 enum ClassroomStatus {
@@ -54,14 +55,27 @@ model User {
 
   children           Child[]
   assignedClassrooms Classroom[] @relation("ClassroomTeacher")
+  loggedActivities   DailyActivity[] @relation("ActivityLogger")
+  loggedNaps         NapLog[]        @relation("NapLogger")
+  loggedMilestones   Milestone[]     @relation("MilestoneLogger")
+  teacherNotes       TeacherNote[]   @relation("TeacherNoteAuthor")
+  classRoutines      ClassRoutine[]  @relation("RoutineTeacher")
+  careNotesCreated   ChildCareNote[] @relation("CareNoteAuthor")
+  dailyThemesCreated DailyTheme[]    @relation("ThemeAuthor")
+  noticesCreated     ClassroomNotice[] @relation("NoticeAuthor")
+  attendanceAudits   AttendanceAuditLog[] @relation("AttendanceAuditor")
+  loggedMoods        ChildMoodLog[]             @relation("MoodLogger")
+  loggedDevObs       DevelopmentalObservation[] @relation("DevObservationLogger")
 
   @@map("users")
 }
 
 model Child {
   id          String   @id @default(uuid())
+  studentId   String?
   firstName   String
   lastName    String
+  avatar      String?
   dateOfBirth DateTime
   gender      String
   parentId    String
@@ -72,6 +86,13 @@ model Child {
   parent      User          @relation(fields: [parentId], references: [id], onDelete: Cascade)
   classroom   Classroom?    @relation(fields: [classroomId], references: [id], onDelete: SetNull)
   attendances Attendance[]
+  dailyActivities DailyActivity[]
+  napLogs         NapLog[]
+  milestones      Milestone[]
+  teacherNotes    TeacherNote[]
+  careNotes       ChildCareNote[]
+  moodLogs        ChildMoodLog[]
+  devObservations DevelopmentalObservation[]
 
   @@map("children")
 }
@@ -89,12 +110,19 @@ model Classroom {
   status      ClassroomStatus @default(ACTIVE)
   teacherId   String?
   academicYear String?
+  badge        String?
+  assistantTeacherName String?
+  imageUrl     String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
   teacher     User?               @relation("ClassroomTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
   children    Child[]
   sessions    ClassroomSession[]
+  teacherNotes TeacherNote[]
+  classRoutines ClassRoutine[]
+  dailyThemes  DailyTheme[]
+  notices      ClassroomNotice[]
 
   @@map("classrooms")
 }
@@ -141,17 +169,43 @@ model Announcement {
 }
 
 model Attendance {
-  id        String           @id @default(uuid())
-  childId   String
-  date      DateTime         @default(now())
-  status    AttendanceStatus @default(PRESENT)
-  notes     String?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id                String           @id @default(uuid())
+  childId           String
+  date              DateTime         @default(now())
+  status            AttendanceStatus @default(PRESENT)
+  arrivalTime       String?
+  guardianName      String?
+  guardianRelation  String?
+  pickupNote        String?
+  specialCareNote   String?
+  isExcused         Boolean          @default(false)
+  session           String?          @default("Morning Session")
+  notes             String?
+  revisionCount     Int              @default(0)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
-  child     Child            @relation(fields: [childId], references: [id], onDelete: Cascade)
+  child             Child            @relation(fields: [childId], references: [id], onDelete: Cascade)
+  auditLogs         AttendanceAuditLog[]
 
   @@map("attendances")
+}
+
+model AttendanceAuditLog {
+  id           String           @id @default(uuid())
+  attendanceId String
+  changedById  String?
+  oldStatus    AttendanceStatus?
+  newStatus    AttendanceStatus
+  oldTime      String?
+  newTime      String?
+  reason       String?          @default("Audited revision during attendance confirmation")
+  createdAt    DateTime         @default(now())
+
+  attendance   Attendance       @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  changedBy    User?            @relation("AttendanceAuditor", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@map("attendance_audit_logs")
 }
 
 enum AdmissionStatus {
@@ -203,5 +257,272 @@ model ContactMessage {
   updatedAt DateTime @updatedAt
 
   @@map("contact_messages")
+}
+
+// ─── TEACHER PORTAL MODELS ───────────────────────────────────────────────────
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  SNACK
+  DINNER
+}
+
+enum MealStatus {
+  ALL_EATEN
+  MOST_EATEN
+  SOME_EATEN
+  NOT_EATEN
+  REFUSED
+}
+
+enum NapStatus {
+  SLEEPING
+  WOKE_UP
+  REFUSED
+  COMPLETED
+}
+
+enum MilestoneCategory {
+  PHYSICAL
+  COGNITIVE
+  SOCIAL_EMOTIONAL
+  LANGUAGE
+  SELF_CARE
+}
+
+model DailyActivity {
+  id              String     @id @default(uuid())
+  childId         String
+  date            DateTime   @default(now())
+  mealType        MealType
+  mealStatus      MealStatus @default(ALL_EATEN)
+  menuDescription String?
+  portion         String?    @default("All")
+  time            String?
+  mealNotes       String?
+  waterCups       Int?       @default(4)
+  dietaryNotes    String?
+  dietaryStatus   String?    @default("Normal")
+  loggedById      String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  child           Child      @relation(fields: [childId], references: [id], onDelete: Cascade)
+  loggedBy        User?      @relation("ActivityLogger", fields: [loggedById], references: [id], onDelete: SetNull)
+
+  @@map("daily_activities")
+}
+
+model NapLog {
+  id          String    @id @default(uuid())
+  childId     String
+  date        DateTime  @default(now())
+  startTime   String
+  endTime     String?
+  durationMin Int?
+  status      NapStatus @default(SLEEPING)
+  restQuality String?   @default("Took Nap")
+  cotNumber   String?   @default("Cot #12")
+  notes       String?
+  loggedById  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  child       Child     @relation(fields: [childId], references: [id], onDelete: Cascade)
+  loggedBy    User?     @relation("NapLogger", fields: [loggedById], references: [id], onDelete: SetNull)
+
+  @@map("nap_logs")
+}
+
+enum ChildMood {
+  HAPPY
+  CALM
+  TIRED
+  UPSET
+}
+
+model ChildMoodLog {
+  id                   String     @id @default(uuid())
+  childId              String
+  date                 DateTime   @default(now())
+  mood                 ChildMood  @default(HAPPY)
+  overallStatus        String?    @default("Excellent")
+  behavioralHighlights String[]   @default([])
+  notes                String?
+  loggedById           String?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  child                Child      @relation(fields: [childId], references: [id], onDelete: Cascade)
+  loggedBy             User?      @relation("MoodLogger", fields: [loggedById], references: [id], onDelete: SetNull)
+
+  @@map("child_mood_logs")
+}
+
+model DevelopmentalObservation {
+  id                 String   @id @default(uuid())
+  childId            String
+  date               DateTime @default(now())
+  curriculumCategory String?  @default("Montessori Sensory")
+  curriculumNotes    String?
+  outdoorCategory    String?  @default("Art & Nature")
+  outdoorNotes       String?
+  teacherObservation String?
+  isSyncedToParent   Boolean  @default(true)
+  loggedById         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  child              Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  loggedBy           User?    @relation("DevObservationLogger", fields: [loggedById], references: [id], onDelete: SetNull)
+
+  @@map("developmental_observations")
+}
+
+model Milestone {
+  id          String            @id @default(uuid())
+  childId     String
+  title       String
+  description String?
+  category    MilestoneCategory @default(PHYSICAL)
+  achievedAt  DateTime          @default(now())
+  loggedById  String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  child       Child             @relation(fields: [childId], references: [id], onDelete: Cascade)
+  loggedBy    User?             @relation("MilestoneLogger", fields: [loggedById], references: [id], onDelete: SetNull)
+
+  @@map("milestones")
+}
+
+// ─── TEACHER NOTES & REMINDERS ────────────────────────────────────────────────
+
+enum TeacherNoteType {
+  CLASSROOM_NOTE
+  MILESTONE_ALERT
+  PARENT_REMINDER
+  GENERAL
+}
+
+model TeacherNote {
+  id          String          @id @default(uuid())
+  teacherId   String
+  classroomId String?
+  childId     String?
+  type        TeacherNoteType @default(GENERAL)
+  title       String
+  content     String
+  isPinned    Boolean         @default(false)
+  isRead      Boolean         @default(false)
+  reminderSentAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  teacher     User            @relation("TeacherNoteAuthor", fields: [teacherId], references: [id], onDelete: Cascade)
+  classroom   Classroom?      @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+  child       Child?          @relation(fields: [childId], references: [id], onDelete: SetNull)
+
+  @@map("teacher_notes")
+}
+
+// ─── CLASS ROUTINE ITEMS ─────────────────────────────────────────────────────
+
+enum RoutineCategory {
+  MORNING_CIRCLE
+  MEAL_NAP
+  STORYTIME
+  OUTDOOR_CREATIVE
+  LEARNING_PLAY
+  FREE_PLAY
+  TRANSITION
+  OTHER
+}
+
+model ClassRoutine {
+  id           String          @id @default(uuid())
+  classroomId  String
+  teacherId    String?
+  title        String
+  description  String?
+  category     RoutineCategory @default(OTHER)
+  location     String?
+  startTime    String
+  endTime      String?
+  status       String?         @default("Scheduled")
+  date         DateTime        @default(now())
+  isCompleted  Boolean         @default(false)
+  tags         String[]        @default([])
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  classroom    Classroom       @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  teacher      User?           @relation("RoutineTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+
+  @@map("class_routines")
+}
+
+// ─── CHILD SPECIAL CARE NOTES ────────────────────────────────────────────────
+
+model ChildCareNote {
+  id          String   @id @default(uuid())
+  childId     String
+  note        String
+  isAllergy   Boolean  @default(false)
+  isMedical   Boolean  @default(false)
+  isUrgent    Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  child       Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  createdBy   User?    @relation("CareNoteAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("child_care_notes")
+}
+
+// ─── TODAY'S THEME ────────────────────────────────────────────────────────────
+
+model DailyTheme {
+  id             String    @id @default(uuid())
+  classroomId    String
+  date           DateTime  @default(now())
+  theme          String
+  weeklyTheme    String?   @default("Autumn Forest Friends & Harvest Wonder")
+  weeklyProgress String?   @default("Day 3 of 4 Complete")
+  weather        String?   @default("Sunny 21°C")
+  mood           String?
+  color          String?
+  emoji          String?
+  notes          String?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  classroom      Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  createdBy      User?     @relation("ThemeAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("daily_themes")
+}
+
+// ─── CLASSROOM NOTICES & BROADCASTS ──────────────────────────────────────────
+
+model ClassroomNotice {
+  id          String    @id @default(uuid())
+  classroomId String?
+  title       String
+  content     String?
+  icon        String?   @default("tree")
+  isActive    Boolean   @default(true)
+  broadcastAt DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  classroom   Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+  createdBy   User?      @relation("NoticeAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("classroom_notices")
 }
 

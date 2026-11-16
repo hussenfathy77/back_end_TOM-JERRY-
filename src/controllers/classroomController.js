@@ -1,4 +1,37 @@
 const prisma = require('../config/database');
+const { resolveAgeRange, ageMatches } = require('../utils/ageGroups');
+
+async function enrollMatchingChildren(classroom, { includeAssigned = false } = {}) {
+  const { from, to } = resolveAgeRange(classroom);
+  if (from == null || to == null) return { enrolledCount: 0, skipped: 'no_age_range' };
+
+  const currentCount = await prisma.child.count({ where: { classroomId: classroom.id } });
+  const availableSeats = Math.max(0, (classroom.capacity || 0) - currentCount);
+  if (availableSeats <= 0) return { enrolledCount: 0, skipped: 'full' };
+
+  const where = includeAssigned
+    ? { NOT: { classroomId: classroom.id } }
+    : { classroomId: null };
+
+  const candidates = await prisma.child.findMany({
+    where,
+    select: { id: true, dateOfBirth: true }
+  });
+
+  const matchingIds = candidates
+    .filter((c) => ageMatches(c.dateOfBirth, from, to))
+    .slice(0, availableSeats)
+    .map((c) => c.id);
+
+  if (!matchingIds.length) return { enrolledCount: 0, skipped: 'none_matching' };
+
+  const result = await prisma.child.updateMany({
+    where: { id: { in: matchingIds } },
+    data: { classroomId: classroom.id }
+  });
+
+  return { enrolledCount: result.count };
+}
 
 // ─── GET ALL CLASSROOMS (with filters) ───────────────────────────────────────
 const getAllClassrooms = async (req, res, next) => {
@@ -60,6 +93,7 @@ const getAllClassrooms = async (req, res, next) => {
       ageGroup: c.ageGroup,
       ageFrom: c.ageFrom,
       ageTo: c.ageTo,
+      room: c.roomNumber,
       roomNumber: c.roomNumber,
       capacity: c.capacity,
       enrolled: c._count.children,
@@ -152,7 +186,8 @@ const createClassroom = async (req, res, next) => {
       capacity,
       status,
       teacherId,
-      academicYear
+      academicYear,
+      autoEnrollByAge
     } = req.body;
 
     if (!name) {
@@ -172,15 +207,17 @@ const createClassroom = async (req, res, next) => {
       }
     }
 
+    const resolvedRange = resolveAgeRange({ ageGroup, ageFrom, ageTo });
+
     const classroom = await prisma.classroom.create({
       data: {
         name,
         subtitle: subtitle || null,
         description: description || null,
         ageGroup: ageGroup || 'General Nursery',
-        ageFrom: ageFrom ? parseFloat(ageFrom) : null,
-        ageTo: ageTo ? parseFloat(ageTo) : null,
-        roomNumber: roomNumber || null,
+        ageFrom: resolvedRange.from,
+        ageTo: resolvedRange.to,
+        roomNumber: roomNumber || req.body.room || null,
         capacity: capacity ? parseInt(capacity) : 15,
         status: status ? status.toUpperCase() : 'ACTIVE',
         teacherId: teacherId || null,
@@ -201,10 +238,19 @@ const createClassroom = async (req, res, next) => {
       }
     });
 
+    let autoEnrolled = 0;
+    if (autoEnrollByAge !== false && autoEnrollByAge !== 'false') {
+      const result = await enrollMatchingChildren(classroom);
+      autoEnrolled = result.enrolledCount;
+    }
+
+    const enrolled = (classroom._count.children || 0) + autoEnrolled;
+
     res.status(201).json({
       ...classroom,
-      enrolled: classroom._count.children,
-      availability: classroom.capacity - classroom._count.children
+      enrolled,
+      autoEnrolled,
+      availability: classroom.capacity - enrolled
     });
   } catch (error) {
     next(error);
@@ -233,10 +279,20 @@ const updateClassroom = async (req, res, next) => {
     if (name !== undefined) updateData.name = name;
     if (subtitle !== undefined) updateData.subtitle = subtitle;
     if (description !== undefined) updateData.description = description;
-    if (ageGroup !== undefined) updateData.ageGroup = ageGroup;
+    if (ageGroup !== undefined) {
+      updateData.ageGroup = ageGroup;
+      const resolved = resolveAgeRange({
+        ageGroup,
+        ageFrom: ageFrom !== undefined ? ageFrom : undefined,
+        ageTo: ageTo !== undefined ? ageTo : undefined
+      });
+      if (resolved.from != null) updateData.ageFrom = resolved.from;
+      if (resolved.to != null) updateData.ageTo = resolved.to;
+    }
     if (ageFrom !== undefined) updateData.ageFrom = ageFrom ? parseFloat(ageFrom) : null;
     if (ageTo !== undefined) updateData.ageTo = ageTo ? parseFloat(ageTo) : null;
-    if (roomNumber !== undefined) updateData.roomNumber = roomNumber;
+    const finalRoom = roomNumber !== undefined ? roomNumber : req.body.room;
+    if (finalRoom !== undefined) updateData.roomNumber = finalRoom;
     if (capacity !== undefined) updateData.capacity = parseInt(capacity);
     if (status !== undefined) updateData.status = status.toUpperCase();
     if (academicYear !== undefined) updateData.academicYear = academicYear;
@@ -778,6 +834,34 @@ const getAvailableTeachers = async (req, res, next) => {
   }
 };
 
+// ─── ENROLL UNASSIGNED CHILDREN MATCHING THE CLASS AGE GROUP ─────────────────
+const enrollByAge = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const includeAssigned = Boolean(req.body?.includeAssigned);
+
+    const classroom = await prisma.classroom.findUnique({ where: { id } });
+    if (!classroom) {
+      return res.status(404).json({ error: 'Classroom not found' });
+    }
+
+    const result = await enrollMatchingChildren(classroom, { includeAssigned });
+    const enrolled = await prisma.child.count({ where: { classroomId: id } });
+
+    res.json({
+      message: result.enrolledCount
+        ? `${result.enrolledCount} children enrolled by age group`
+        : 'No matching unassigned children found for this age group',
+      classroomId: id,
+      enrolledCount: result.enrolledCount,
+      enrolled,
+      skipped: result.skipped || null
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ─── GET UNASSIGNED CHILDREN (not in any classroom) ──────────────────────────
 const getUnassignedChildren = async (req, res, next) => {
   try {
@@ -835,7 +919,8 @@ const exportRoster = async (req, res, next) => {
         name: c.name,
         subtitle: c.subtitle,
         ageGroup: c.ageGroup,
-        roomNumber: c.roomNumber,
+        room: c.roomNumber,
+      roomNumber: c.roomNumber,
         capacity: c.capacity,
         enrolled: c._count.children,
         status: c.status,
@@ -876,5 +961,6 @@ module.exports = {
   deleteSession,
   getAvailableTeachers,
   getUnassignedChildren,
+  enrollByAge,
   exportRoster
 };
